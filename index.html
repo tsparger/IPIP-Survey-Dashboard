@@ -22,9 +22,11 @@
         .top-overview { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .summary-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .summary-card .label { font-size: 13px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
-        .summary-card .pct { font-size: 36px; font-weight: 700; color: #003B71; margin: 4px 0; }
-        .summary-card .frac { font-size: 14px; color: #4a5568; }
-        .summary-card .updated { font-size: 12px; color: #a0aec0; margin-top: 8px; }
+        .summary-card .pct { font-size: 30px; font-weight: 700; color: #003B71; margin: 2px 0; line-height: 1.1; }
+        .summary-card .frac { font-size: 13px; color: #4a5568; }
+        .summary-card .updated { font-size: 12px; color: #a0aec0; margin-top: 10px; }
+        .dual-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+        .dual-stats .stat-label { font-size: 11px; color: #718096; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 
         .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; }
         .tabs button { background: none; border: none; padding: 10px 16px; cursor: pointer; font-size: 14px; font-weight: 600; color: #718096; border-bottom: 3px solid transparent; margin-bottom: -2px; }
@@ -94,14 +96,34 @@
     <div class="top-overview" id="top-overview">
         <div class="summary-card">
             <div class="label">Department Survey</div>
-            <div class="pct" id="dept-overall-pct">—</div>
-            <div class="frac" id="dept-overall-frac">Loading...</div>
+            <div class="dual-stats">
+                <div class="stat">
+                    <div class="stat-label">Submitted</div>
+                    <div class="pct" id="dept-overall-submitted-pct">—</div>
+                    <div class="frac" id="dept-overall-submitted-frac">Loading...</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Validated</div>
+                    <div class="pct" id="dept-overall-validated-pct">—</div>
+                    <div class="frac" id="dept-overall-validated-frac">Loading...</div>
+                </div>
+            </div>
             <div class="updated" id="dept-updated"></div>
         </div>
         <div class="summary-card">
             <div class="label">Pharmacy Survey</div>
-            <div class="pct" id="pharm-overall-pct">—</div>
-            <div class="frac" id="pharm-overall-frac">Loading...</div>
+            <div class="dual-stats">
+                <div class="stat">
+                    <div class="stat-label">Submitted</div>
+                    <div class="pct" id="pharm-overall-submitted-pct">—</div>
+                    <div class="frac" id="pharm-overall-submitted-frac">Loading...</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Validated</div>
+                    <div class="pct" id="pharm-overall-validated-pct">—</div>
+                    <div class="frac" id="pharm-overall-validated-frac">Loading...</div>
+                </div>
+            </div>
             <div class="updated" id="pharm-updated"></div>
         </div>
     </div>
@@ -122,9 +144,10 @@
     </div>
 
     <div class="card" style="font-size:12px; color:#718096;">
-        <strong>Completion rule:</strong> a department is counted "completed" when it has at least one submission where the Confirmation question is answered <strong>Yes</strong>.
-        For the Department Survey that means either <code>InfoCorrect</code> or <code>InfoModified</code> equals <code>'Yes'</code>; for the Pharmacy Survey it means <code>PharmacyDispenseValidated</code> equals <code>'Yes'</code>.
-        The same Region + Location + Department combination is counted once regardless of how many times it has been submitted.
+        <strong>Two metrics:</strong>
+        <strong>Submitted</strong> = the Region+Location+Department combo has at least one row in SharePoint, regardless of how the Confirmation was answered.
+        <strong>Validated</strong> = at least one submission for that combo has the Confirmation answered <strong>Yes</strong> (for the Department Survey, either <code>InfoCorrect</code> or <code>InfoModified</code> equals <code>'Yes'</code>; for the Pharmacy Survey, <code>PharmacyDispenseValidated</code> equals <code>'Yes'</code>). The green check on each survey's dropdown only appears for validated entries.
+        Each Region+Location+Department combo is counted once regardless of how many times it has been submitted.
     </div>
 </div>
 
@@ -210,19 +233,23 @@ function isPharmResponseConfirmed(r) {
     return r.PharmacyDispenseValidated === 'Yes';
 }
 
-// Build a Set of "Region||Location||Department" keys that count as confirmed.
-function buildConfirmedKeys(rows, isConfirmed) {
-    const set = new Set();
+// Build TWO Sets of "Region||Location||Department" keys:
+//   submitted = any row whose three identifying fields are populated
+//   validated = subset whose confirmation answer is Yes
+function buildKeySets(rows, isConfirmed) {
+    const submitted = new Set();
+    const validated = new Set();
     rows.forEach(r => {
         if (!r) return;
-        if (!isConfirmed(r)) return;
         const region = r.Region || r.region;
         const location = r.Location || r.location;
         const dept = r.Department || r.department;
         if (!region || !location || !dept) return;
-        set.add(`${region}||${location}||${dept}`);
+        const key = `${region}||${location}||${dept}`;
+        submitted.add(key);
+        if (isConfirmed(r)) validated.add(key);
     });
-    return set;
+    return { submitted, validated };
 }
 
 // ============ STATS ============
@@ -248,24 +275,28 @@ function statsFor(which) {
     const data = surveyData[which];
     const rows = responses[which];
     const isConfirmed = which === 'dept' ? isDeptResponseConfirmed : isPharmResponseConfirmed;
-    const confirmed = buildConfirmedKeys(rows, isConfirmed);
+    const sets = buildKeySets(rows, isConfirmed);
     const inScope = getInScopeKeys(data, which);
 
-    const result = { overall: { in: 0, done: 0 }, byRegion: {} };
+    const result = { overall: { in: 0, submitted: 0, validated: 0 }, byRegion: {} };
     Object.keys(inScope).forEach(region => {
-        const r = { in: 0, done: 0, byLocation: {} };
+        const r = { in: 0, submitted: 0, validated: 0, byLocation: {} };
         Object.entries(inScope[region]).forEach(([loc, deps]) => {
-            const l = { in: deps.length, done: 0 };
+            const l = { in: deps.length, submitted: 0, validated: 0 };
             deps.forEach(dep => {
-                if (confirmed.has(`${region}||${loc}||${dep}`)) l.done++;
+                const k = `${region}||${loc}||${dep}`;
+                if (sets.submitted.has(k)) l.submitted++;
+                if (sets.validated.has(k)) l.validated++;
             });
             r.in += l.in;
-            r.done += l.done;
+            r.submitted += l.submitted;
+            r.validated += l.validated;
             r.byLocation[loc] = l;
         });
         result.byRegion[region] = r;
         result.overall.in += r.in;
-        result.overall.done += r.done;
+        result.overall.submitted += r.submitted;
+        result.overall.validated += r.validated;
     });
     return result;
 }
@@ -288,11 +319,13 @@ function progressBar(done, total) {
 function renderTopOverview() {
     ['dept','pharm'].forEach(which => {
         const stats = statsFor(which);
-        const { done, in: inScope } = stats.overall;
-        document.getElementById(`${which==='dept'?'dept':'pharm'}-overall-pct`).textContent = fmtPct(done, inScope);
-        document.getElementById(`${which==='dept'?'dept':'pharm'}-overall-frac`).textContent = `${done} / ${inScope} confirmed`;
+        const { submitted, validated, in: inScope } = stats.overall;
+        document.getElementById(`${which}-overall-submitted-pct`).textContent = fmtPct(submitted, inScope);
+        document.getElementById(`${which}-overall-submitted-frac`).textContent = `${submitted} / ${inScope} submitted`;
+        document.getElementById(`${which}-overall-validated-pct`).textContent = fmtPct(validated, inScope);
+        document.getElementById(`${which}-overall-validated-frac`).textContent = `${validated} / ${inScope} validated`;
         const updated = lastFetchedAt[which];
-        document.getElementById(`${which==='dept'?'dept':'pharm'}-updated`).textContent = updated ? `Last refreshed: ${updated.toLocaleString()}` : '';
+        document.getElementById(`${which}-updated`).textContent = updated ? `Last refreshed: ${updated.toLocaleString()}` : '';
     });
 }
 
@@ -306,13 +339,24 @@ function renderRegionGrid() {
     }
     grid.innerHTML = regions.map(r => {
         const s = stats.byRegion[r];
-        const pct = s.in ? Math.round((s.done / s.in) * 100) : 0;
+        const subPct = s.in ? Math.round((s.submitted / s.in) * 100) : 0;
+        const valPct = s.in ? Math.round((s.validated / s.in) * 100) : 0;
         return `
             <div class="region-card ${activeRegion===r?'active':''}" onclick="selectRegion('${r}')">
                 <div class="name">${r}</div>
-                <div class="pct">${pct}%</div>
-                <div class="frac">${s.done} / ${s.in} confirmed</div>
-                ${progressBar(s.done, s.in)}
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-top:6px;">
+                    <div>
+                        <div style="font-size:11px; color:#718096; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">Submitted</div>
+                        <div style="font-size:22px; font-weight:700; color:#2d3748; line-height:1.1;">${subPct}%</div>
+                        <div style="font-size:12px; color:#4a5568;">${s.submitted} / ${s.in}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:11px; color:#718096; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">Validated</div>
+                        <div style="font-size:22px; font-weight:700; color:#2d3748; line-height:1.1;">${valPct}%</div>
+                        <div style="font-size:12px; color:#4a5568;">${s.validated} / ${s.in}</div>
+                    </div>
+                </div>
+                ${progressBar(s.validated, s.in)}
             </div>`;
     }).join('');
 }
@@ -332,22 +376,24 @@ function renderLocationTable() {
         return;
     }
     const rows = Object.entries(regionStats.byLocation).map(([loc, s]) => {
-        const pct = s.in ? Math.round((s.done / s.in) * 100) : 0;
+        const valPct = s.in ? Math.round((s.validated / s.in) * 100) : 0;
         let pill = '<span class="pill gray">Not started</span>';
-        if (s.done === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
-        else if (s.done > 0) pill = '<span class="pill">In progress</span>';
-        return { loc, done: s.done, total: s.in, pct, pill };
-    }).sort((a,b) => b.pct - a.pct || a.loc.localeCompare(b.loc));
+        if (s.validated === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
+        else if (s.validated > 0) pill = '<span class="pill green">Validating</span>';
+        else if (s.submitted > 0) pill = '<span class="pill">Submitted</span>';
+        return { loc, submitted: s.submitted, validated: s.validated, total: s.in, valPct, pill };
+    }).sort((a,b) => b.valPct - a.valPct || b.submitted - a.submitted || a.loc.localeCompare(b.loc));
     document.getElementById('loc-table-wrap').innerHTML = `
         <table>
-            <thead><tr><th>Location</th><th style="width:90px;">Confirmed</th><th class="bar-cell">Progress</th><th style="width:70px;">%</th><th style="width:110px;">Status</th></tr></thead>
+            <thead><tr><th>Location</th><th style="width:90px;">Submitted</th><th style="width:90px;">Validated</th><th class="bar-cell">Validated progress</th><th style="width:70px;">%</th><th style="width:130px;">Status</th></tr></thead>
             <tbody>
                 ${rows.map(r => `
                     <tr>
                         <td>${escapeHtml(r.loc)}</td>
-                        <td>${r.done} / ${r.total}</td>
-                        <td class="bar-cell">${progressBar(r.done, r.total)}</td>
-                        <td class="pct-cell">${r.total ? r.pct + '%' : '—'}</td>
+                        <td>${r.submitted} / ${r.total}</td>
+                        <td>${r.validated} / ${r.total}</td>
+                        <td class="bar-cell">${progressBar(r.validated, r.total)}</td>
+                        <td class="pct-cell">${r.total ? r.valPct + '%' : '—'}</td>
                         <td>${r.pill}</td>
                     </tr>`).join('')}
             </tbody>
