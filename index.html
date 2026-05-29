@@ -379,8 +379,7 @@ function renderLocationTable() {
         const valPct = s.in ? Math.round((s.validated / s.in) * 100) : 0;
         let pill = '<span class="pill gray">Not started</span>';
         if (s.validated === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
-        else if (s.validated > 0) pill = '<span class="pill green">Validating</span>';
-        else if (s.submitted > 0) pill = '<span class="pill">Submitted</span>';
+        else if (s.submitted > 0 || s.validated > 0) pill = '<span class="pill">In progress</span>';
         return { loc, submitted: s.submitted, validated: s.validated, total: s.in, valPct, pill };
     }).sort((a,b) => b.valPct - a.valPct || b.submitted - a.submitted || a.loc.localeCompare(b.loc));
     document.getElementById('loc-table-wrap').innerHTML = `
