@@ -148,9 +148,9 @@
 
 <script>
 // ============ CONFIG ============
-// Default Get-Responses URL for the dept survey (already in use by the survey itself).
-// The pharmacy URL is configured via the Settings modal.
+// Default Get-Responses URLs. Either can be overridden via the Settings modal.
 const DEFAULT_DEPT_URL = 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b37313ea930749d8857f40d8a4f515cf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xs21v76AzcUerV0duk79qhgNQdHzUp-TygfaT7FBDcw';
+const DEFAULT_PHARM_URL = 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50bf80f15a194633af0f45018eb7c941/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8IoDFtzow7nm1jVctdqSsz5of-8Vlxak9Y8-LsqdZLI';
 const SURVEY_DATA_URLS = {
     dept:  'https://tsparger.github.io/IPIP-Department-Survey/survey-data.js',
     pharm: 'https://tsparger.github.io/IPIP-Pharmacy-Survey/survey-data.js',
@@ -168,8 +168,8 @@ let responses  = { dept: [], pharm: [] };
 function loadSettings() {
     try {
         const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
-        return { deptUrl: s.deptUrl || DEFAULT_DEPT_URL, pharmUrl: s.pharmUrl || '' };
-    } catch { return { deptUrl: DEFAULT_DEPT_URL, pharmUrl: '' }; }
+        return { deptUrl: s.deptUrl || DEFAULT_DEPT_URL, pharmUrl: s.pharmUrl || DEFAULT_PHARM_URL };
+    } catch { return { deptUrl: DEFAULT_DEPT_URL, pharmUrl: DEFAULT_PHARM_URL }; }
 }
 function saveSettings() {
     settings = {
