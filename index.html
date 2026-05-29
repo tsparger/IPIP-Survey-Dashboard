@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KP NPI IPIP — Survey Completion Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #2d3748; }
+
+        .nav { background: #003B71; color: white; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+        .nav h1 { font-size: 16px; font-weight: 600; }
+        .nav .spacer { flex: 1; }
+        .nav button { background: rgba(255,255,255,0.15); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+        .nav button:hover { background: rgba(255,255,255,0.25); }
+
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+        .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 16px; }
+        h2 { font-size: 18px; color: #003B71; border-bottom: 2px solid #003B71; padding-bottom: 8px; margin-bottom: 16px; }
+        h3 { font-size: 15px; color: #2d3748; margin-bottom: 12px; }
+
+        .top-overview { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .summary-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .summary-card .label { font-size: 13px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+        .summary-card .pct { font-size: 36px; font-weight: 700; color: #003B71; margin: 4px 0; }
+        .summary-card .frac { font-size: 14px; color: #4a5568; }
+        .summary-card .updated { font-size: 12px; color: #a0aec0; margin-top: 8px; }
+
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; }
+        .tabs button { background: none; border: none; padding: 10px 16px; cursor: pointer; font-size: 14px; font-weight: 600; color: #718096; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+        .tabs button.active { color: #003B71; border-bottom-color: #003B71; }
+        .tabs button:hover:not(.active) { color: #2d3748; }
+
+        .region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px; }
+        .region-card { background: white; border: 2px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all 0.15s; }
+        .region-card:hover { border-color: #003B71; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .region-card.active { border-color: #003B71; background: #ebf4ff; }
+        .region-card .name { font-size: 14px; font-weight: 700; color: #003B71; margin-bottom: 6px; }
+        .region-card .pct { font-size: 28px; font-weight: 700; color: #2d3748; }
+        .region-card .frac { font-size: 13px; color: #4a5568; }
+        .progress { height: 8px; background: #e2e8f0; border-radius: 4px; margin: 8px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #38a169, #2f855a); transition: width 0.3s; }
+        .progress-fill.low { background: linear-gradient(90deg, #e53e3e, #c53030); }
+        .progress-fill.mid { background: linear-gradient(90deg, #ed8936, #dd6b20); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 12px; background: #f7fafc; border-bottom: 2px solid #e2e8f0; font-size: 12px; color: #4a5568; text-transform: uppercase; letter-spacing: 0.3px; }
+        td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+        tr:hover { background: #f7fafc; }
+        td.pct-cell { font-weight: 700; }
+        td.bar-cell { width: 140px; }
+        td.bar-cell .progress { margin: 0; }
+
+        .empty-state { padding: 40px; text-align: center; color: #718096; font-size: 14px; }
+        .loading { padding: 40px; text-align: center; color: #4a5568; font-size: 14px; }
+        .error { padding: 16px; background: #fed7d7; border: 2px solid #e53e3e; color: #742a2a; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal.hidden { display: none; }
+        .modal-card { background: white; border-radius: 10px; padding: 24px; max-width: 600px; width: 100%; margin: 16px; }
+        .modal-card h2 { border-bottom: 2px solid #003B71; padding-bottom: 8px; margin-bottom: 16px; }
+        .modal-card label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 13px; }
+        .modal-card input { width: 100%; padding: 9px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; font-family: monospace; }
+        .modal-card .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+        .modal-card .actions button { padding: 9px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 13px; }
+        .modal-card .actions .primary { background: #003B71; color: white; }
+        .modal-card .actions .secondary { background: #e2e8f0; color: #2d3748; }
+        .modal-card .hint { font-size: 12px; color: #4a5568; margin-top: 4px; }
+
+        .pill { display: inline-block; background: #edf2f7; color: #4a5568; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .pill.green { background: #c6f6d5; color: #1c4532; }
+        .pill.red { background: #fed7d7; color: #742a2a; }
+        .pill.gray { background: #e2e8f0; color: #4a5568; }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 700px) {
+            .top-overview { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <h1>KP NPI IPIP — Survey Completion Dashboard</h1>
+    <div class="spacer"></div>
+    <button onclick="openSettings()">Settings</button>
+    <button onclick="refresh()" id="refresh-btn">Refresh</button>
+</div>
+
+<div class="container">
+
+    <!-- Top-of-page summary cards -->
+    <div class="top-overview" id="top-overview">
+        <div class="summary-card">
+            <div class="label">Department Survey</div>
+            <div class="pct" id="dept-overall-pct">—</div>
+            <div class="frac" id="dept-overall-frac">Loading...</div>
+            <div class="updated" id="dept-updated"></div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Pharmacy Survey</div>
+            <div class="pct" id="pharm-overall-pct">—</div>
+            <div class="frac" id="pharm-overall-frac">Loading...</div>
+            <div class="updated" id="pharm-updated"></div>
+        </div>
+    </div>
+
+    <div id="errors"></div>
+
+    <div class="card">
+        <div class="tabs">
+            <button id="tab-dept" class="active" onclick="selectTab('dept')">Department Survey</button>
+            <button id="tab-pharm" onclick="selectTab('pharm')">Pharmacy Survey</button>
+        </div>
+
+        <h3>Completion by region</h3>
+        <div class="region-grid" id="region-grid"></div>
+
+        <h3 id="loc-heading" class="hidden">Locations in <span id="loc-region-name"></span></h3>
+        <div id="loc-table-wrap"></div>
+    </div>
+
+    <div class="card" style="font-size:12px; color:#718096;">
+        <strong>Completion rule:</strong> a department is counted "completed" when it has at least one submission where the Confirmation question is answered <strong>Yes</strong>.
+        For the Department Survey that means either <code>InfoCorrect</code> or <code>InfoModified</code> equals <code>'Yes'</code>; for the Pharmacy Survey it means <code>PharmacyDispenseValidated</code> equals <code>'Yes'</code>.
+        The same Region + Location + Department combination is counted once regardless of how many times it has been submitted.
+    </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal hidden" id="settings-modal">
+    <div class="modal-card">
+        <h2>Dashboard Settings</h2>
+        <p class="hint" style="margin-bottom:8px;">Configure the Power Automate <strong>Get Responses</strong> URLs for each survey. The dashboard fetches these on every refresh to compute completion rates.</p>
+        <label>Department Survey — Get Responses URL</label>
+        <input type="text" id="settings-dept-url" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
+        <div class="hint">From the dept-survey "IPIP - Get Responses" flow trigger.</div>
+        <label>Pharmacy Survey — Get Responses URL</label>
+        <input type="text" id="settings-pharm-url" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
+        <div class="hint">Build a sibling flow on the pharmacy survey side that returns Region / Location / Department / PharmacyDispenseValidated for each row in the IPIP Pharmacy Responses list.</div>
+        <div class="actions">
+            <button class="secondary" onclick="closeSettings()">Cancel</button>
+            <button class="primary" onclick="saveSettings()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============ CONFIG ============
+// Default Get-Responses URL for the dept survey (already in use by the survey itself).
+// The pharmacy URL is configured via the Settings modal.
+const DEFAULT_DEPT_URL = 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b37313ea930749d8857f40d8a4f515cf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xs21v76AzcUerV0duk79qhgNQdHzUp-TygfaT7FBDcw';
+const SURVEY_DATA_URLS = {
+    dept:  'https://tsparger.github.io/IPIP-Department-Survey/survey-data.js',
+    pharm: 'https://tsparger.github.io/IPIP-Pharmacy-Survey/survey-data.js',
+};
+const SETTINGS_KEY = 'ipip-dashboard-settings';
+
+// ============ STATE ============
+let settings = loadSettings();
+let activeTab = 'dept';
+let activeRegion = null;
+let surveyData = { dept: null, pharm: null };
+let responses  = { dept: [], pharm: [] };
+
+// ============ SETTINGS ============
+function loadSettings() {
+    try {
+        const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+        return { deptUrl: s.deptUrl || DEFAULT_DEPT_URL, pharmUrl: s.pharmUrl || '' };
+    } catch { return { deptUrl: DEFAULT_DEPT_URL, pharmUrl: '' }; }
+}
+function saveSettings() {
+    settings = {
+        deptUrl: document.getElementById('settings-dept-url').value.trim(),
+        pharmUrl: document.getElementById('settings-pharm-url').value.trim(),
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    closeSettings();
+    refresh();
+}
+function openSettings() {
+    document.getElementById('settings-dept-url').value = settings.deptUrl;
+    document.getElementById('settings-pharm-url').value = settings.pharmUrl;
+    document.getElementById('settings-modal').classList.remove('hidden');
+}
+function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
+
+// ============ FETCH ============
+async function fetchSurveyData(which) {
+    const res = await fetch(SURVEY_DATA_URLS[which] + '?bust=' + Date.now());
+    const text = await res.text();
+    const m = text.match(/const\s+SURVEY_DATA\s*=\s*([\s\S]*);\s*$/);
+    if (!m) throw new Error(`Could not parse ${which} survey-data.js`);
+    return JSON.parse(m[1]);
+}
+async function fetchResponses(url) {
+    if (!url) return [];
+    const res = await fetch(url);
+    const data = await res.json();
+    return (data && data.responses) || [];
+}
+
+// ============ COMPLETION RULES ============
+function isDeptResponseConfirmed(r) {
+    return r.InfoCorrect === 'Yes' || r.InfoModified === 'Yes';
+}
+function isPharmResponseConfirmed(r) {
+    return r.PharmacyDispenseValidated === 'Yes';
+}
+
+// Build a Set of "Region||Location||Department" keys that count as confirmed.
+function buildConfirmedKeys(rows, isConfirmed) {
+    const set = new Set();
+    rows.forEach(r => {
+        if (!r) return;
+        if (!isConfirmed(r)) return;
+        const region = r.Region || r.region;
+        const location = r.Location || r.location;
+        const dept = r.Department || r.department;
+        if (!region || !location || !dept) return;
+        set.add(`${region}||${location}||${dept}`);
+    });
+    return set;
+}
+
+// ============ STATS ============
+function getInScopeKeys(data, which) {
+    const out = {};
+    if (!data) return out;
+    const regions = data.regions || [];
+    const locsKey = which === 'dept' ? 'locations' : 'pharmacyLocations';
+    const depsKey = which === 'dept' ? 'departments' : 'pharmacyDepartments';
+    regions.forEach(region => {
+        out[region] = {};
+        const locs = (data[locsKey] || {})[region] || [];
+        const depMap = (data[depsKey] || {})[region] || {};
+        locs.forEach(loc => {
+            const deps = depMap[loc] || [];
+            out[region][loc] = deps.map(d => d.dept);
+        });
+    });
+    return out;
+}
+
+function statsFor(which) {
+    const data = surveyData[which];
+    const rows = responses[which];
+    const isConfirmed = which === 'dept' ? isDeptResponseConfirmed : isPharmResponseConfirmed;
+    const confirmed = buildConfirmedKeys(rows, isConfirmed);
+    const inScope = getInScopeKeys(data, which);
+
+    const result = { overall: { in: 0, done: 0 }, byRegion: {} };
+    Object.keys(inScope).forEach(region => {
+        const r = { in: 0, done: 0, byLocation: {} };
+        Object.entries(inScope[region]).forEach(([loc, deps]) => {
+            const l = { in: deps.length, done: 0 };
+            deps.forEach(dep => {
+                if (confirmed.has(`${region}||${loc}||${dep}`)) l.done++;
+            });
+            r.in += l.in;
+            r.done += l.done;
+            r.byLocation[loc] = l;
+        });
+        result.byRegion[region] = r;
+        result.overall.in += r.in;
+        result.overall.done += r.done;
+    });
+    return result;
+}
+
+// ============ RENDER ============
+function pctClass(pct) {
+    if (pct >= 75) return '';
+    if (pct >= 40) return 'mid';
+    return 'low';
+}
+function fmtPct(done, total) {
+    if (!total) return '—';
+    return Math.round((done / total) * 100) + '%';
+}
+function progressBar(done, total) {
+    const pct = total ? (done / total) * 100 : 0;
+    return `<div class="progress"><div class="progress-fill ${pctClass(pct)}" style="width:${pct}%"></div></div>`;
+}
+
+function renderTopOverview() {
+    ['dept','pharm'].forEach(which => {
+        const stats = statsFor(which);
+        const { done, in: inScope } = stats.overall;
+        document.getElementById(`${which==='dept'?'dept':'pharm'}-overall-pct`).textContent = fmtPct(done, inScope);
+        document.getElementById(`${which==='dept'?'dept':'pharm'}-overall-frac`).textContent = `${done} / ${inScope} confirmed`;
+        const updated = lastFetchedAt[which];
+        document.getElementById(`${which==='dept'?'dept':'pharm'}-updated`).textContent = updated ? `Last refreshed: ${updated.toLocaleString()}` : '';
+    });
+}
+
+function renderRegionGrid() {
+    const stats = statsFor(activeTab);
+    const grid = document.getElementById('region-grid');
+    const regions = Object.keys(stats.byRegion);
+    if (!regions.length) {
+        grid.innerHTML = '<div class="empty-state">No region data — survey-data didn\'t load.</div>';
+        return;
+    }
+    grid.innerHTML = regions.map(r => {
+        const s = stats.byRegion[r];
+        const pct = s.in ? Math.round((s.done / s.in) * 100) : 0;
+        return `
+            <div class="region-card ${activeRegion===r?'active':''}" onclick="selectRegion('${r}')">
+                <div class="name">${r}</div>
+                <div class="pct">${pct}%</div>
+                <div class="frac">${s.done} / ${s.in} confirmed</div>
+                ${progressBar(s.done, s.in)}
+            </div>`;
+    }).join('');
+}
+
+function renderLocationTable() {
+    if (!activeRegion) {
+        document.getElementById('loc-heading').classList.add('hidden');
+        document.getElementById('loc-table-wrap').innerHTML = '<div class="empty-state">Click a region above to see its locations.</div>';
+        return;
+    }
+    document.getElementById('loc-heading').classList.remove('hidden');
+    document.getElementById('loc-region-name').textContent = activeRegion;
+    const stats = statsFor(activeTab);
+    const regionStats = stats.byRegion[activeRegion];
+    if (!regionStats) {
+        document.getElementById('loc-table-wrap').innerHTML = '<div class="empty-state">No data for this region.</div>';
+        return;
+    }
+    const rows = Object.entries(regionStats.byLocation).map(([loc, s]) => {
+        const pct = s.in ? Math.round((s.done / s.in) * 100) : 0;
+        let pill = '<span class="pill gray">Not started</span>';
+        if (s.done === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
+        else if (s.done > 0) pill = '<span class="pill">In progress</span>';
+        return { loc, done: s.done, total: s.in, pct, pill };
+    }).sort((a,b) => b.pct - a.pct || a.loc.localeCompare(b.loc));
+    document.getElementById('loc-table-wrap').innerHTML = `
+        <table>
+            <thead><tr><th>Location</th><th style="width:90px;">Confirmed</th><th class="bar-cell">Progress</th><th style="width:70px;">%</th><th style="width:110px;">Status</th></tr></thead>
+            <tbody>
+                ${rows.map(r => `
+                    <tr>
+                        <td>${escapeHtml(r.loc)}</td>
+                        <td>${r.done} / ${r.total}</td>
+                        <td class="bar-cell">${progressBar(r.done, r.total)}</td>
+                        <td class="pct-cell">${r.total ? r.pct + '%' : '—'}</td>
+                        <td>${r.pill}</td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>`;
+}
+
+function escapeHtml(s) {
+    return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============ INTERACTIONS ============
+function selectTab(which) {
+    activeTab = which;
+    activeRegion = null;
+    document.getElementById('tab-dept').classList.toggle('active', which === 'dept');
+    document.getElementById('tab-pharm').classList.toggle('active', which === 'pharm');
+    renderRegionGrid();
+    renderLocationTable();
+}
+function selectRegion(region) {
+    activeRegion = activeRegion === region ? null : region;
+    renderRegionGrid();
+    renderLocationTable();
+}
+
+// ============ MAIN ============
+let lastFetchedAt = { dept: null, pharm: null };
+function showError(msg) {
+    const c = document.getElementById('errors');
+    c.innerHTML += `<div class="error">${escapeHtml(msg)}</div>`;
+}
+async function refresh() {
+    document.getElementById('errors').innerHTML = '';
+    document.getElementById('refresh-btn').disabled = true;
+    document.getElementById('refresh-btn').textContent = 'Refreshing…';
+    const tasks = [];
+    tasks.push(fetchSurveyData('dept').then(d => { surveyData.dept = d; }).catch(e => showError(`Couldn't load dept survey-data.js: ${e.message}`)));
+    tasks.push(fetchSurveyData('pharm').then(d => { surveyData.pharm = d; }).catch(e => showError(`Couldn't load pharmacy survey-data.js: ${e.message}`)));
+    tasks.push(fetchResponses(settings.deptUrl).then(r => { responses.dept = r; lastFetchedAt.dept = new Date(); }).catch(e => showError(`Couldn't load dept survey responses: ${e.message}`)));
+    if (settings.pharmUrl) {
+        tasks.push(fetchResponses(settings.pharmUrl).then(r => { responses.pharm = r; lastFetchedAt.pharm = new Date(); }).catch(e => showError(`Couldn't load pharmacy survey responses: ${e.message}`)));
+    } else {
+        showError('Pharmacy Get Responses URL is not configured — click Settings to add it.');
+    }
+    await Promise.all(tasks);
+    renderTopOverview();
+    renderRegionGrid();
+    renderLocationTable();
+    document.getElementById('refresh-btn').disabled = false;
+    document.getElementById('refresh-btn').textContent = 'Refresh';
+}
+
+refresh();
+</script>
+
+</body>
+</html>
