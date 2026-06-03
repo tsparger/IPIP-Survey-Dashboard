@@ -13,6 +13,7 @@
         .nav .spacer { flex: 1; }
         .nav button { background: rgba(255,255,255,0.15); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
         .nav button:hover { background: rgba(255,255,255,0.25); }
+        .nav button.active { background: rgba(255,255,255,0.3); font-weight: 600; cursor: default; }
 
         .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
         .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 16px; }
@@ -87,6 +88,9 @@
 <div class="nav">
     <h1>KP NPI IPIP — Survey Completion Dashboard</h1>
     <div class="spacer"></div>
+    <button onclick="location.href='https://tsparger.github.io/IPIP-Department-Survey/'">Department Survey</button>
+    <button onclick="location.href='https://tsparger.github.io/IPIP-Pharmacy-Survey/'">Pharmacy Survey</button>
+    <button class="active">Dashboard</button>
     <button onclick="openSettings()">Settings</button>
     <button onclick="refresh()" id="refresh-btn">Refresh</button>
 </div>
