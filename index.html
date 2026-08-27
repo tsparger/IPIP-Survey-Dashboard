@@ -20,7 +20,7 @@
         h2 { font-size: 18px; color: #003B71; border-bottom: 2px solid #003B71; padding-bottom: 8px; margin-bottom: 16px; }
         h3 { font-size: 15px; color: #2d3748; margin-bottom: 12px; }
 
-        .top-overview { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .top-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
         .summary-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .summary-card .label { font-size: 13px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
         .summary-card .pct { font-size: 30px; font-weight: 700; color: #003B71; margin: 2px 0; line-height: 1.1; }
@@ -90,6 +90,7 @@
     <div class="spacer"></div>
     <button onclick="location.href='https://tsparger.github.io/IPIP-Department-Survey/'">Department Survey</button>
     <button onclick="location.href='https://tsparger.github.io/IPIP-Pharmacy-Survey/'">Pharmacy Survey</button>
+    <button onclick="location.href='https://tsparger.github.io/IPIP-Printer-Survey/'">Printer Survey</button>
     <button class="active">Dashboard</button>
     <button onclick="openSettings()">Settings</button>
     <button onclick="refresh()" id="refresh-btn">Refresh</button>
@@ -98,48 +99,12 @@
 <div class="container">
 
     <!-- Top-of-page summary cards -->
-    <div class="top-overview" id="top-overview">
-        <div class="summary-card">
-            <div class="label">Department Survey</div>
-            <div class="dual-stats">
-                <div class="stat">
-                    <div class="stat-label">Submitted</div>
-                    <div class="pct" id="dept-overall-submitted-pct">—</div>
-                    <div class="frac" id="dept-overall-submitted-frac">Loading...</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Validated</div>
-                    <div class="pct" id="dept-overall-validated-pct">—</div>
-                    <div class="frac" id="dept-overall-validated-frac">Loading...</div>
-                </div>
-            </div>
-            <div class="updated" id="dept-updated"></div>
-        </div>
-        <div class="summary-card">
-            <div class="label">Pharmacy Survey</div>
-            <div class="dual-stats">
-                <div class="stat">
-                    <div class="stat-label">Submitted</div>
-                    <div class="pct" id="pharm-overall-submitted-pct">—</div>
-                    <div class="frac" id="pharm-overall-submitted-frac">Loading...</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Validated</div>
-                    <div class="pct" id="pharm-overall-validated-pct">—</div>
-                    <div class="frac" id="pharm-overall-validated-frac">Loading...</div>
-                </div>
-            </div>
-            <div class="updated" id="pharm-updated"></div>
-        </div>
-    </div>
+    <div class="top-overview" id="top-overview"></div>
 
     <div id="errors"></div>
 
     <div class="card">
-        <div class="tabs">
-            <button id="tab-dept" class="active" onclick="selectTab('dept')">Department Survey</button>
-            <button id="tab-pharm" onclick="selectTab('pharm')">Pharmacy Survey</button>
-        </div>
+        <div class="tabs" id="tabs"></div>
 
         <h3>Completion by region</h3>
         <div class="region-grid" id="region-grid"></div>
@@ -153,6 +118,10 @@
         <strong>Submitted</strong> = the Region+Location+Department combo has at least one row in SharePoint, regardless of how the Confirmation was answered.
         <strong>Validated</strong> = at least one submission for that combo has the Confirmation answered <strong>Yes</strong> (for the Department Survey, either <code>InfoCorrect</code> or <code>InfoModified</code> equals <code>'Yes'</code>; for the Pharmacy Survey, <code>PharmacyDispenseValidated</code> equals <code>'Yes'</code>). The green check on each survey's dropdown only appears for validated entries.
         Each Region+Location+Department combo is counted once regardless of how many times it has been submitted.
+        <br/><br/>
+        <strong>Printer Survey:</strong> submitting already requires every printer field, so there is no separate validated metric —
+        the second number counts <strong>printer sets</strong> (one row per bin-label printer) recorded against that region or location.
+        Its denominator is the same pharmacy department location list the Pharmacy Survey uses.
     </div>
 </div>
 
@@ -162,11 +131,14 @@
         <h2>Dashboard Settings</h2>
         <p class="hint" style="margin-bottom:8px;">Configure the Power Automate <strong>Get Responses</strong> URLs for each survey. The dashboard fetches these on every refresh to compute completion rates.</p>
         <label>Department Survey — Get Responses URL</label>
-        <input type="text" id="settings-dept-url" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
+        <input type="text" id="settings-deptUrl" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
         <div class="hint">From the dept-survey "IPIP - Get Responses" flow trigger.</div>
         <label>Pharmacy Survey — Get Responses URL</label>
-        <input type="text" id="settings-pharm-url" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
+        <input type="text" id="settings-pharmUrl" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
         <div class="hint">Build a sibling flow on the pharmacy survey side that returns Region / Location / Department / PharmacyDispenseValidated for each row in the IPIP Pharmacy Responses list.</div>
+        <label>Printer Survey — Get Responses URL</label>
+        <input type="text" id="settings-printerUrl" placeholder="https://...powerautomate.../triggers/manual/paths/invoke?..." />
+        <div class="hint">From the "IPIP - Get Printer Responses" flow trigger. Returns one row per printer set from the IPIP Printer Responses list.</div>
         <div class="actions">
             <button class="secondary" onclick="closeSettings()">Cancel</button>
             <button class="primary" onclick="saveSettings()">Save</button>
@@ -176,50 +148,104 @@
 
 <script>
 // ============ CONFIG ============
-// Default Get-Responses URLs. Either can be overridden via the Settings modal.
-const DEFAULT_DEPT_URL = 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b37313ea930749d8857f40d8a4f515cf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xs21v76AzcUerV0duk79qhgNQdHzUp-TygfaT7FBDcw';
-const DEFAULT_PHARM_URL = 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50bf80f15a194633af0f45018eb7c941/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8IoDFtzow7nm1jVctdqSsz5of-8Vlxak9Y8-LsqdZLI';
-const SURVEY_DATA_URLS = {
-    dept:  'https://tsparger.github.io/IPIP-Department-Survey/survey-data.js',
-    pharm: 'https://tsparger.github.io/IPIP-Pharmacy-Survey/survey-data.js',
+// Each survey is described once here; every card, tab, and table is generated from this map.
+// To add a fourth survey, add an entry and a matching field in the Settings modal.
+const SURVEYS = {
+    dept: {
+        label: 'Department Survey',
+        dataUrl: 'https://tsparger.github.io/IPIP-Department-Survey/survey-data.js',
+        locsKey: 'locations',
+        depsKey: 'departments',
+        settingsField: 'deptUrl',
+        defaultUrl: 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b37313ea930749d8857f40d8a4f515cf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xs21v76AzcUerV0duk79qhgNQdHzUp-TygfaT7FBDcw',
+        // Second metric: how many in-scope departments have been confirmed correct.
+        hasValidated: true,
+        secondLabel: 'Validated',
+        progressMetric: 'validated',
+        isConfirmed: r => r.InfoCorrect === 'Yes' || r.InfoModified === 'Yes',
+    },
+    pharm: {
+        label: 'Pharmacy Survey',
+        dataUrl: 'https://tsparger.github.io/IPIP-Pharmacy-Survey/survey-data.js',
+        locsKey: 'pharmacyLocations',
+        depsKey: 'pharmacyDepartments',
+        settingsField: 'pharmUrl',
+        defaultUrl: 'https://997e87e2062feb52af5c332a27e4b4.0d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50bf80f15a194633af0f45018eb7c941/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8IoDFtzow7nm1jVctdqSsz5of-8Vlxak9Y8-LsqdZLI',
+        hasValidated: true,
+        secondLabel: 'Validated',
+        progressMetric: 'validated',
+        isConfirmed: r => r.PharmacyDispenseValidated === 'Yes',
+    },
+    printer: {
+        label: 'Printer Survey',
+        // Shares the pharmacy location list, so the same Region / Facility / Pharmacy
+        // Department Location keys line up across the two surveys.
+        dataUrl: 'https://tsparger.github.io/IPIP-Printer-Survey/survey-data.js',
+        locsKey: 'pharmacyLocations',
+        depsKey: 'pharmacyDepartments',
+        settingsField: 'printerUrl',
+        // Paste the "Get Printer Responses" flow URL here once the flow exists,
+        // or set it from the Settings modal.
+        defaultUrl: '',
+        // The printer survey has no separate confirmation question — submitting already
+        // requires every printer field, so submitted and validated would always be equal.
+        // The second metric counts printer sets recorded instead.
+        hasValidated: false,
+        secondLabel: 'Printer sets',
+        progressMetric: 'submitted',
+        isConfirmed: () => false,
+    },
 };
+const SURVEY_KEYS = Object.keys(SURVEYS);
 const SETTINGS_KEY = 'ipip-dashboard-settings';
 
 // ============ STATE ============
 let settings = loadSettings();
 let activeTab = 'dept';
 let activeRegion = null;
-let surveyData = { dept: null, pharm: null };
-let responses  = { dept: [], pharm: [] };
+let surveyData = {};
+let responses = {};
+let lastFetchedAt = {};
+SURVEY_KEYS.forEach(k => { surveyData[k] = null; responses[k] = []; lastFetchedAt[k] = null; });
 
 // ============ SETTINGS ============
 function loadSettings() {
-    try {
-        const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
-        return { deptUrl: s.deptUrl || DEFAULT_DEPT_URL, pharmUrl: s.pharmUrl || DEFAULT_PHARM_URL };
-    } catch { return { deptUrl: DEFAULT_DEPT_URL, pharmUrl: DEFAULT_PHARM_URL }; }
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { saved = {}; }
+    const out = {};
+    SURVEY_KEYS.forEach(k => {
+        const f = SURVEYS[k].settingsField;
+        out[f] = saved[f] !== undefined ? saved[f] : SURVEYS[k].defaultUrl;
+    });
+    return out;
 }
 function saveSettings() {
-    settings = {
-        deptUrl: document.getElementById('settings-dept-url').value.trim(),
-        pharmUrl: document.getElementById('settings-pharm-url').value.trim(),
-    };
+    const next = {};
+    SURVEY_KEYS.forEach(k => {
+        const f = SURVEYS[k].settingsField;
+        const el = document.getElementById('settings-' + f);
+        next[f] = el ? el.value.trim() : '';
+    });
+    settings = next;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     closeSettings();
     refresh();
 }
 function openSettings() {
-    document.getElementById('settings-dept-url').value = settings.deptUrl;
-    document.getElementById('settings-pharm-url').value = settings.pharmUrl;
+    SURVEY_KEYS.forEach(k => {
+        const f = SURVEYS[k].settingsField;
+        const el = document.getElementById('settings-' + f);
+        if (el) el.value = settings[f] || '';
+    });
     document.getElementById('settings-modal').classList.remove('hidden');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 
 // ============ FETCH ============
 async function fetchSurveyData(which) {
-    const res = await fetch(SURVEY_DATA_URLS[which] + '?bust=' + Date.now());
+    const res = await fetch(SURVEYS[which].dataUrl + '?bust=' + Date.now());
     const text = await res.text();
-    const m = text.match(/const\s+SURVEY_DATA\s*=\s*([\s\S]*);\s*$/);
+    const m = text.match(/const\s+SURVEY_DATA\s*=\s*([\s\S]*?);\s*$/);
     if (!m) throw new Error(`Could not parse ${which} survey-data.js`);
     return JSON.parse(m[1]);
 }
@@ -231,19 +257,14 @@ async function fetchResponses(url) {
 }
 
 // ============ COMPLETION RULES ============
-function isDeptResponseConfirmed(r) {
-    return r.InfoCorrect === 'Yes' || r.InfoModified === 'Yes';
-}
-function isPharmResponseConfirmed(r) {
-    return r.PharmacyDispenseValidated === 'Yes';
-}
-
-// Build TWO Sets of "Region||Location||Department" keys:
+// Build Sets of "Region||Location||Department" keys:
 //   submitted = any row whose three identifying fields are populated
 //   validated = subset whose confirmation answer is Yes
+//   counts    = rows per key (used for the printer survey's printer-set totals)
 function buildKeySets(rows, isConfirmed) {
     const submitted = new Set();
     const validated = new Set();
+    const counts = new Map();
     rows.forEach(r => {
         if (!r) return;
         const region = r.Region || r.region;
@@ -252,56 +273,52 @@ function buildKeySets(rows, isConfirmed) {
         if (!region || !location || !dept) return;
         const key = `${region}||${location}||${dept}`;
         submitted.add(key);
+        counts.set(key, (counts.get(key) || 0) + 1);
         if (isConfirmed(r)) validated.add(key);
     });
-    return { submitted, validated };
+    return { submitted, validated, counts };
 }
 
 // ============ STATS ============
 function getInScopeKeys(data, which) {
     const out = {};
     if (!data) return out;
-    const regions = data.regions || [];
-    const locsKey = which === 'dept' ? 'locations' : 'pharmacyLocations';
-    const depsKey = which === 'dept' ? 'departments' : 'pharmacyDepartments';
-    regions.forEach(region => {
+    const cfg = SURVEYS[which];
+    (data.regions || []).forEach(region => {
         out[region] = {};
-        const locs = (data[locsKey] || {})[region] || [];
-        const depMap = (data[depsKey] || {})[region] || {};
+        const locs = (data[cfg.locsKey] || {})[region] || [];
+        const depMap = (data[cfg.depsKey] || {})[region] || {};
         locs.forEach(loc => {
-            const deps = depMap[loc] || [];
-            out[region][loc] = deps.map(d => d.dept);
+            out[region][loc] = (depMap[loc] || []).map(d => d.dept);
         });
     });
     return out;
 }
 
 function statsFor(which) {
-    const data = surveyData[which];
-    const rows = responses[which];
-    const isConfirmed = which === 'dept' ? isDeptResponseConfirmed : isPharmResponseConfirmed;
-    const sets = buildKeySets(rows, isConfirmed);
-    const inScope = getInScopeKeys(data, which);
+    const cfg = SURVEYS[which];
+    const sets = buildKeySets(responses[which] || [], cfg.isConfirmed);
+    const inScope = getInScopeKeys(surveyData[which], which);
 
-    const result = { overall: { in: 0, submitted: 0, validated: 0 }, byRegion: {} };
+    const result = { overall: { in: 0, submitted: 0, validated: 0, rows: 0 }, byRegion: {} };
     Object.keys(inScope).forEach(region => {
-        const r = { in: 0, submitted: 0, validated: 0, byLocation: {} };
+        const r = { in: 0, submitted: 0, validated: 0, rows: 0, byLocation: {} };
         Object.entries(inScope[region]).forEach(([loc, deps]) => {
-            const l = { in: deps.length, submitted: 0, validated: 0 };
+            const l = { in: deps.length, submitted: 0, validated: 0, rows: 0 };
             deps.forEach(dep => {
                 const k = `${region}||${loc}||${dep}`;
                 if (sets.submitted.has(k)) l.submitted++;
                 if (sets.validated.has(k)) l.validated++;
+                l.rows += sets.counts.get(k) || 0;
             });
-            r.in += l.in;
-            r.submitted += l.submitted;
-            r.validated += l.validated;
+            r.in += l.in; r.submitted += l.submitted; r.validated += l.validated; r.rows += l.rows;
             r.byLocation[loc] = l;
         });
         result.byRegion[region] = r;
         result.overall.in += r.in;
         result.overall.submitted += r.submitted;
         result.overall.validated += r.validated;
+        result.overall.rows += r.rows;
     });
     return result;
 }
@@ -322,19 +339,45 @@ function progressBar(done, total) {
 }
 
 function renderTopOverview() {
-    ['dept','pharm'].forEach(which => {
-        const stats = statsFor(which);
-        const { submitted, validated, in: inScope } = stats.overall;
-        document.getElementById(`${which}-overall-submitted-pct`).textContent = fmtPct(submitted, inScope);
-        document.getElementById(`${which}-overall-submitted-frac`).textContent = `${submitted} / ${inScope} submitted`;
-        document.getElementById(`${which}-overall-validated-pct`).textContent = fmtPct(validated, inScope);
-        document.getElementById(`${which}-overall-validated-frac`).textContent = `${validated} / ${inScope} validated`;
+    document.getElementById('top-overview').innerHTML = SURVEY_KEYS.map(which => {
+        const cfg = SURVEYS[which];
+        const s = statsFor(which).overall;
         const updated = lastFetchedAt[which];
-        document.getElementById(`${which}-updated`).textContent = updated ? `Last refreshed: ${updated.toLocaleString()}` : '';
-    });
+        const configured = !!settings[cfg.settingsField];
+        const second = cfg.hasValidated
+            ? `<div class="pct">${fmtPct(s.validated, s.in)}</div>
+               <div class="frac">${s.validated} / ${s.in} validated</div>`
+            : `<div class="pct">${s.rows}</div>
+               <div class="frac">printer sets recorded</div>`;
+        return `
+            <div class="summary-card">
+                <div class="label">${cfg.label}</div>
+                <div class="dual-stats">
+                    <div class="stat">
+                        <div class="stat-label">Submitted</div>
+                        <div class="pct">${fmtPct(s.submitted, s.in)}</div>
+                        <div class="frac">${s.submitted} / ${s.in} submitted</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">${cfg.secondLabel}</div>
+                        ${second}
+                    </div>
+                </div>
+                <div class="updated">${configured
+                    ? (updated ? 'Last refreshed: ' + updated.toLocaleString() : 'Loading...')
+                    : 'Get Responses URL not configured — add it under Settings.'}</div>
+            </div>`;
+    }).join('');
+}
+
+function renderTabs() {
+    document.getElementById('tabs').innerHTML = SURVEY_KEYS.map(k =>
+        `<button id="tab-${k}" class="${activeTab === k ? 'active' : ''}" onclick="selectTab('${k}')">${SURVEYS[k].label}</button>`
+    ).join('');
 }
 
 function renderRegionGrid() {
+    const cfg = SURVEYS[activeTab];
     const stats = statsFor(activeTab);
     const grid = document.getElementById('region-grid');
     const regions = Object.keys(stats.byRegion);
@@ -345,7 +388,11 @@ function renderRegionGrid() {
     grid.innerHTML = regions.map(r => {
         const s = stats.byRegion[r];
         const subPct = s.in ? Math.round((s.submitted / s.in) * 100) : 0;
-        const valPct = s.in ? Math.round((s.validated / s.in) * 100) : 0;
+        const secondValue = cfg.hasValidated
+            ? (s.in ? Math.round((s.validated / s.in) * 100) : 0) + '%'
+            : String(s.rows);
+        const secondFrac = cfg.hasValidated ? `${s.validated} / ${s.in}` : 'recorded';
+        const barDone = cfg.progressMetric === 'validated' ? s.validated : s.submitted;
         return `
             <div class="region-card ${activeRegion===r?'active':''}" onclick="selectRegion('${r}')">
                 <div class="name">${r}</div>
@@ -356,17 +403,18 @@ function renderRegionGrid() {
                         <div style="font-size:12px; color:#4a5568;">${s.submitted} / ${s.in}</div>
                     </div>
                     <div>
-                        <div style="font-size:11px; color:#718096; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">Validated</div>
-                        <div style="font-size:22px; font-weight:700; color:#2d3748; line-height:1.1;">${valPct}%</div>
-                        <div style="font-size:12px; color:#4a5568;">${s.validated} / ${s.in}</div>
+                        <div style="font-size:11px; color:#718096; font-weight:600; text-transform:uppercase; letter-spacing:0.4px;">${cfg.secondLabel}</div>
+                        <div style="font-size:22px; font-weight:700; color:#2d3748; line-height:1.1;">${secondValue}</div>
+                        <div style="font-size:12px; color:#4a5568;">${secondFrac}</div>
                     </div>
                 </div>
-                ${progressBar(s.validated, s.in)}
+                ${progressBar(barDone, s.in)}
             </div>`;
     }).join('');
 }
 
 function renderLocationTable() {
+    const cfg = SURVEYS[activeTab];
     if (!activeRegion) {
         document.getElementById('loc-heading').classList.add('hidden');
         document.getElementById('loc-table-wrap').innerHTML = '<div class="empty-state">Click a region above to see its locations.</div>';
@@ -380,24 +428,36 @@ function renderLocationTable() {
         document.getElementById('loc-table-wrap').innerHTML = '<div class="empty-state">No data for this region.</div>';
         return;
     }
+    const useValidated = cfg.progressMetric === 'validated';
     const rows = Object.entries(regionStats.byLocation).map(([loc, s]) => {
-        const valPct = s.in ? Math.round((s.validated / s.in) * 100) : 0;
+        const done = useValidated ? s.validated : s.submitted;
+        const pct = s.in ? Math.round((done / s.in) * 100) : 0;
         let pill = '<span class="pill gray">Not started</span>';
-        if (s.validated === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
+        if (done === s.in && s.in > 0) pill = '<span class="pill green">Complete</span>';
         else if (s.submitted > 0 || s.validated > 0) pill = '<span class="pill blue">In progress</span>';
-        return { loc, submitted: s.submitted, validated: s.validated, total: s.in, valPct, pill };
-    }).sort((a,b) => b.valPct - a.valPct || b.submitted - a.submitted || a.loc.localeCompare(b.loc));
+        return { loc, submitted: s.submitted, validated: s.validated, sets: s.rows, total: s.in, done, pct, pill };
+    }).sort((a,b) => b.pct - a.pct || b.submitted - a.submitted || a.loc.localeCompare(b.loc));
+
+    const secondHeader = cfg.hasValidated ? 'Validated' : 'Printer sets';
+    const progressHeader = useValidated ? 'Validated progress' : 'Submitted progress';
     document.getElementById('loc-table-wrap').innerHTML = `
         <table>
-            <thead><tr><th>Location</th><th style="width:90px;">Submitted</th><th style="width:90px;">Validated</th><th class="bar-cell">Validated progress</th><th style="width:70px;">%</th><th style="width:130px;">Status</th></tr></thead>
+            <thead><tr>
+                <th>Location</th>
+                <th style="width:90px;">Submitted</th>
+                <th style="width:90px;">${secondHeader}</th>
+                <th class="bar-cell">${progressHeader}</th>
+                <th style="width:70px;">%</th>
+                <th style="width:130px;">Status</th>
+            </tr></thead>
             <tbody>
                 ${rows.map(r => `
                     <tr>
                         <td>${escapeHtml(r.loc)}</td>
                         <td>${r.submitted} / ${r.total}</td>
-                        <td>${r.validated} / ${r.total}</td>
-                        <td class="bar-cell">${progressBar(r.validated, r.total)}</td>
-                        <td class="pct-cell">${r.total ? r.valPct + '%' : '—'}</td>
+                        <td>${cfg.hasValidated ? r.validated + ' / ' + r.total : r.sets}</td>
+                        <td class="bar-cell">${progressBar(r.done, r.total)}</td>
+                        <td class="pct-cell">${r.total ? r.pct + '%' : '—'}</td>
                         <td>${r.pill}</td>
                     </tr>`).join('')}
             </tbody>
@@ -412,8 +472,7 @@ function escapeHtml(s) {
 function selectTab(which) {
     activeTab = which;
     activeRegion = null;
-    document.getElementById('tab-dept').classList.toggle('active', which === 'dept');
-    document.getElementById('tab-pharm').classList.toggle('active', which === 'pharm');
+    renderTabs();
     renderRegionGrid();
     renderLocationTable();
 }
@@ -424,30 +483,38 @@ function selectRegion(region) {
 }
 
 // ============ MAIN ============
-let lastFetchedAt = { dept: null, pharm: null };
 function showError(msg) {
-    const c = document.getElementById('errors');
-    c.innerHTML += `<div class="error">${escapeHtml(msg)}</div>`;
+    document.getElementById('errors').innerHTML += `<div class="error">${escapeHtml(msg)}</div>`;
 }
 async function refresh() {
     document.getElementById('errors').innerHTML = '';
-    document.getElementById('refresh-btn').disabled = true;
-    document.getElementById('refresh-btn').textContent = 'Refreshing…';
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+
     const tasks = [];
-    tasks.push(fetchSurveyData('dept').then(d => { surveyData.dept = d; }).catch(e => showError(`Couldn't load dept survey-data.js: ${e.message}`)));
-    tasks.push(fetchSurveyData('pharm').then(d => { surveyData.pharm = d; }).catch(e => showError(`Couldn't load pharmacy survey-data.js: ${e.message}`)));
-    tasks.push(fetchResponses(settings.deptUrl).then(r => { responses.dept = r; lastFetchedAt.dept = new Date(); }).catch(e => showError(`Couldn't load dept survey responses: ${e.message}`)));
-    if (settings.pharmUrl) {
-        tasks.push(fetchResponses(settings.pharmUrl).then(r => { responses.pharm = r; lastFetchedAt.pharm = new Date(); }).catch(e => showError(`Couldn't load pharmacy survey responses: ${e.message}`)));
-    } else {
-        showError('Pharmacy Get Responses URL is not configured — click Settings to add it.');
-    }
+    SURVEY_KEYS.forEach(which => {
+        const cfg = SURVEYS[which];
+        tasks.push(fetchSurveyData(which)
+            .then(d => { surveyData[which] = d; })
+            .catch(e => showError(`Couldn't load ${cfg.label} survey-data.js: ${e.message}`)));
+        const url = settings[cfg.settingsField];
+        if (url) {
+            tasks.push(fetchResponses(url)
+                .then(r => { responses[which] = r; lastFetchedAt[which] = new Date(); })
+                .catch(e => showError(`Couldn't load ${cfg.label} responses: ${e.message}`)));
+        }
+        // A missing URL is an expected state for a survey whose flow isn't built yet;
+        // the summary card says so instead of raising a red error.
+    });
     await Promise.all(tasks);
+
     renderTopOverview();
+    renderTabs();
     renderRegionGrid();
     renderLocationTable();
-    document.getElementById('refresh-btn').disabled = false;
-    document.getElementById('refresh-btn').textContent = 'Refresh';
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
 }
 
 refresh();
